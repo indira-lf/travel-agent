@@ -5,7 +5,7 @@
 
     <!-- 统一日志脱敏：手机号/身份证/银行卡/邮箱/地址（houbb 内置） + 秘钥（自定义扩展） -->
     <conversionRule conversionWord="sensitive"
-                    converterClass="com.gogo.travel.config.sensitive.SensitiveMaskingConverter"/>
+                    converterClass="com.travel.config.sensitive.SensitiveMaskingConverter"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

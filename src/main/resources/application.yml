@@ -10,18 +10,21 @@ spring:
       - classpath:intent-seed.yml
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      # 用 127.0.0.1 而非 localhost：macOS 下 Lettuce/netty 缺少原生 DNS 解析库，
+      # 无法解析 "localhost"（报 localhost/<unresolved>），改用 IP 绕过 DNS。
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:Hollis666}
+      # 用户名/密码通过环境变量注入；未配置（Redis 容器无鉴权）时留空，不发送 AUTH
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
       database: 0
-      username: hollis
 
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/gogo_travel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: hollis
-    password: Hollis666
+    url: jdbc:mysql://localhost:3306/travel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
     druid:
       initial-size: 5
       min-idle: 5
@@ -36,7 +39,7 @@ spring:
         login-password: admin
 
 mybatis-plus:
-  type-handlers-package: com.gogo.travel.config
+  type-handlers-package: com.travel.config
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
@@ -50,7 +53,7 @@ mybatis-plus:
 
 logging:
   level:
-    com.gogo.travel: INFO # 需要排查问题时改为DEBUG，我们打了很多DEBUG日志用于观察agent运行情况
+    com.travel: INFO # 需要排查问题时改为DEBUG，我们打了很多DEBUG日志用于观察agent运行情况
     io.agentscope.core: INFO
 
 travel:
@@ -64,10 +67,10 @@ app:
   # NewsData.io API Key，用于目的地资讯查询（query_destination_news 工具）
   # 免费注册地址：https://newsdata.io，免费额度 200 次/天
   # 未配置时该工具会优雅降级，不影响其他功能
-  news-api-key: ${NEWS_API_KEY}  # 通过环境变量 NEWS_API_KEY 注入；未配置时该工具优雅降级
+  news-api-key: ${NEWS_API_KEY:}  # 通过环境变量 NEWS_API_KEY 注入；未配置时该工具优雅降级
   weather-mcp:
     # 天气 MCP Streamable HTTP 端点（阿里云云市场网关地址，含 AppCode 鉴权）
-    endpoint: ${WEATHER_MCP_ENDPOINT}  # 通过环境变量 WEATHER_MCP_ENDPOINT 注入
+    endpoint: ${WEATHER_MCP_ENDPOINT:}  # 通过环境变量 WEATHER_MCP_ENDPOINT 注入；未配置时天气 MCP 不装配
     # 天气 MCP 工具白名单（逗号分隔的工具名称）
     # 当前选定 6 个差旅核心工具（省略 POI/经纬度类、长期预报、生活指数等）：
     enabled-tools: 城市天气实况,城市15日预报,城市天气预警,城市空气实况,城市24小时预报,城市40日预报
@@ -82,7 +85,7 @@ app:
     # 命令参数（逗号分隔）。默认 npx -y orizn-visa-mcp
     args: ${ORIZN_MCP_ARGS:-y,orizn-visa-mcp}
     # Orizn Visa API Key（env 形式注入子进程）。未配置时走免费模式，仅暴露两个免费工具
-    api-key: ${ORIZN_API_KEY}  # 通过环境变量 ORIZN_API_KEY 注入；未配置时走免费模式
+    api-key: ${ORIZN_API_KEY:}  # 通过环境变量 ORIZN_API_KEY 注入；未配置时走免费模式
     # MCP 工具白名单（逗号分隔）。
     # 留空则暴露 Orizn 服务端声明的全部工具（按需 + 免费）；
     # 非空则只向 LLM 暴露白名单内的工具，减少 Token 消耗。
@@ -121,11 +124,12 @@ agentscope:
     api-key: ${DASHSCOPE_API_KEY:@dashscope.api.key@}  # 通过环境变量 DASHSCOPE_API_KEY 注入；未设置时回退到 pom 中 dashscope.api.key 的编译期值
   bailian:
     # 百炼记忆库 ID
-    memory-library-id: ${BAILIAN_MEMORY_LIBRARY_ID}  # 通过环境变量 BAILIAN_MEMORY_LIBRARY_ID 注入
-    access-key-id: ${BAILIAN_ACCESS_KEY_ID}  # 通过环境变量 BAILIAN_ACCESS_KEY_ID 注入
-    access-key-secret: ${BAILIAN_ACCESS_KEY_SECRET}  # 通过环境变量 BAILIAN_ACCESS_KEY_SECRET 注入
-    workspace-id: ${BAILIAN_WORKSPACE_ID}  # 通过环境变量 BAILIAN_WORKSPACE_ID 注入
-    index-id: ${BAILIAN_INDEX_ID}  # 通过环境变量 BAILIAN_INDEX_ID 注入
+    # 未配置（环境变量为空）时整体优雅降级：长期记忆工厂返回 null，景点 RAG 不装配，应用仍可启动
+    memory-library-id: ${BAILIAN_MEMORY_LIBRARY_ID:}  # 通过环境变量 BAILIAN_MEMORY_LIBRARY_ID 注入；未配置时降级
+    access-key-id: ${BAILIAN_ACCESS_KEY_ID:}  # 通过环境变量 BAILIAN_ACCESS_KEY_ID 注入；未配置时降级
+    access-key-secret: ${BAILIAN_ACCESS_KEY_SECRET:}  # 通过环境变量 BAILIAN_ACCESS_KEY_SECRET 注入；未配置时降级
+    workspace-id: ${BAILIAN_WORKSPACE_ID:}  # 通过环境变量 BAILIAN_WORKSPACE_ID 注入；未配置时降级
+    index-id: ${BAILIAN_INDEX_ID:}  # 通过环境变量 BAILIAN_INDEX_ID 注入；未配置时景点 RAG 不装配
 
 # Sa-Token 配置
 sa-token:

@@ -1,10 +1,235 @@
 # GoGo 智能差旅助手
 
-## 零、项目如何启动
+## 零、项目如何启动 & 快速开始
 
-（不看必挂！！！ ）
+> 不看必挂！！！建议先通读本节再动手。
+> 完整图文版（含百炼控制台截图）：https://thoughts.aliyun.com/workspaces/6963289eb0fc2e001bb052eb/docs/6a5a032dd31fed0001c735ee
 
-https://thoughts.aliyun.com/workspaces/6963289eb0fc2e001bb052eb/docs/6a5a032dd31fed0001c735ee
+### 0.1 配置修改
+
+项目中所有需要改成你自己的配置已统一为**环境变量注入**方式——在 `application.yml` 中以 `${VAR:默认值}` 形式声明，启动时通过环境变量覆盖即可，**无需改源码、无需重新编译**。未设置的环境变量会使用 yml 中的默认值（多为占位符），因此可以只覆盖你需要改的那几项。
+
+| 用途 | 配置项（application.yml） | 环境变量 | 获取方式 | 是否必改 |
+|---|---|---|---|---|
+| DashScope API Key | `agentscope.dashscope.api-key` | `DASHSCOPE_API_KEY` | https://aliyun.com/product/bailian （默认用 qwen3.7-max，费用较高，注意成本） | 是 |
+| MySQL | `spring.datasource.url` / `username` / `password` | `MYSQL_USERNAME` / `MYSQL_PASSWORD`（默认 root/root） | 自己部署或云服务 | 是 |
+| Redis | `spring.data.redis.host` / `password` | `REDIS_HOST` / `REDIS_PASSWORD` | 自己部署或云服务 | 是 |
+| 百炼记忆库（长期记忆） | `agentscope.bailian.access-key-id` / `access-key-secret` / `workspace-id` / `index-id` | `BAILIAN_ACCESS_KEY_ID` / `BAILIAN_ACCESS_KEY_SECRET` / `BAILIAN_WORKSPACE_ID` / `BAILIAN_INDEX_ID` | 百炼控制台创建 | 否（不提供无法查询用户偏好） |
+| 百炼景点查询知识库（RAG） | `agentscope.bailian.memory-library-id` | `BAILIAN_MEMORY_LIBRARY_ID` | 百炼控制台创建 | 否（不提供无法查询城市景点） |
+| NewsData.io API Key | `app.news-api-key` | `NEWS_API_KEY` | https://newsdata.io | 否（不提供无法查询目的地新闻） |
+| 天气 MCP Endpoint | `app.weather-mcp.endpoint` | `WEATHER_MCP_ENDPOINT` | https://market.aliyun.com/detail/cmapi00074002 | 否（不提供无法查询天气） |
+| Orizn Visa API Key | `app.orizn-mcp.api-key` | `ORIZN_API_KEY` | https://visa.orizn.app | 否（不提供无法查询签证） |
+
+> 说明：`agentscope.dashscope.api-key` 写作 `${DASHSCOPE_API_KEY:@dashscope.api.key@}`，未设环境变量时回退到 `pom.xml` 中 `dashscope.api.key` 的编译期值，因此不设环境变量也能跑。
+
+#### 运行时按需提供（跑 Skill 才需要）
+
+Agent 运行时会要求提供以下外部 CLI 凭证，需要时去申请即可。**不装 Skill 也能启动**，只是对应外部能力无法真正下单。
+
+| 依赖 | Skill 需求 | 备注 |
+|---|---|---|
+| tuniu-cli | 机票 / 酒店 / 火车 统一入口 | https://open.tuniu.com/mcp/docs/apidoc/mcp/hotelMCP.html |
+| flyai / rolling-go-hotel 相关 CLI（默认不启用） | 备用机票、酒店 Skill | https://h5.133.cn/webapp/pages/mcpApiKey?zhuti=HBGJ&uid=H5GNoxOAM9AizyUeYkP-IIso / https://flyai.open.fliggy.com/console / https://github.com/RollingGo-AI/rollinggo-hotel-skill-CN |
+
+#### 其他可改配置
+
+| 配置项 | 位置 | 场景 |
+|---|---|---|
+| 服务端口 | `server.port` | 8080 已被占用时改（也可用环境变量 `SERVER_PORT` 覆盖） |
+| Sa-Token 有效期 | `sa-token.timeout` | 默认 30 天 |
+| 日志级别 | `logging.level.com.gogo.travel` | （强烈建议）调试时改为 DEBUG |
+| 工具熔断白名单 | `app.circuit-breaker.monitored-tool-names` | 新增易失败工具时追加 |
+| Skill 目录 | `travel.skill.path` | 默认 `classpath:skills` |
+| MCP 白名单 | `app.weather-mcp.enabled-tools` / `app.orizn-mcp.enabled-tools` | 控制暴露给 LLM 的工具，降 token |
+
+### 0.2 初始化数据库
+
+**建库：**
+
+```sql
+CREATE DATABASE travel DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+**执行 DDL 与初始化数据：** 在 MySQL 中执行 `src/main/resources/db/schema.sql`。
+
+脚本会创建 11 张表并写入：
+
+- 5 个测试用户档案 `user_profile`（u_001 / u001 / u002 / u003 / u004）
+- 5 个登录账号 `user_account`（明文密码 123456，仅用于本地开发）
+- 12 条差旅政策 `travel_policy_rule`（4 职级 × 3 城市等级）
+
+| 账号 | 密码 | 姓名 | 角色 |
+|---|---|---|---|
+| admin | 123456 | 系统管理员 | ADMIN |
+| alice | 123456 | 张三 | USER |
+| bob | 123456 | 李四 | USER |
+| charlie | 123456 | 王五 | USER |
+| david | 123456 | 赵六 | USER |
+
+> `admin` 用于登录后台，可以帮用户审批差旅申请；其他用户用于登录对话。
+
+### 0.3 初始化百炼记忆库和知识库
+
+#### 百炼知识库（可选）
+
+可以用百炼知识库，或 Dify 及其他自建 RAG。百炼使用方式：
+
+1. 在百炼控制台创建一个知识库。
+2. 从代码中找到提供的数据集上传：`src/main/resources/dataset/tourist_attraction.xlsx`。
+3. 知识库相关配置获取：
+   - `accessKeyId` / `accessKeySecret`：通过个人中心的 AccessKey 创建。
+   - `workspaceId` / `indexId`：百炼控制台对应实例。
+4. 把知识库 id 配置到 `agentscope.bailian.memory-library-id`（环境变量 `BAILIAN_MEMORY_LIBRARY_ID`）。
+
+#### 记忆库（建议配置）
+
+在百炼控制台创建记忆库，将其 id 配置到 `agentscope.bailian.memory-library-id`（与景点知识库复用同一配置项），用于 MasterAgent / ItineraryPlanAgent 的长期偏好记忆。
+
+### 0.4 启动后端
+
+**方式 A：IntelliJ IDEA（推荐）**
+
+1. 打开项目根目录，等 Maven 索引完成。
+2. Project Structure -> SDK 选 JDK 21。
+3. 右键 `GogoTravelApplication.java` -> Run 'GogoTravelApplication'。
+
+看到以下日志代表启动成功：
+
+```
+Started GogoTravelApplication in x.xxx seconds
+Tomcat started on port 8080 (http)
+```
+
+**查看日志（强烈建议改成 DEBUG）：** 代码中打了很多用于调试的日志，方便了解 agent 运行流程，但需要把日志级别改成 DEBUG（默认 INFO）：
+
+```yaml
+logging:
+  level:
+    com.gogo.travel: DEBUG
+```
+
+**方式 B：命令行 Maven**
+
+```bash
+cd /path/to/travel-agent
+# 首次或依赖有变更
+mvn -DskipTests clean install
+# 启动（会阻塞在前台，Ctrl+C 停止）
+mvn spring-boot:run
+```
+
+**方式 C：可运行 Jar**
+
+```bash
+mvn -DskipTests clean package
+# 生成 target/travel-agent-1.0.0-SNAPSHOT.jar
+java -jar target/travel-agent-1.0.0-SNAPSHOT.jar
+```
+
+生产 / Docker 场景推荐这种方式，配合环境变量覆盖配置：
+
+```bash
+DASHSCOPE_API_KEY=sk-xxxx \
+BAILIAN_MEMORY_LIBRARY_ID=xxx \
+BAILIAN_ACCESS_KEY_ID=xxx \
+BAILIAN_ACCESS_KEY_SECRET=xxx \
+BAILIAN_WORKSPACE_ID=xxx \
+BAILIAN_INDEX_ID=xxx \
+NEWS_API_KEY=pub_xxx \
+REDIS_HOST=localhost REDIS_PASSWORD=xxxx \
+java -jar target/travel-agent-1.0.0-SNAPSHOT.jar
+```
+
+### 0.5 启动前端
+
+```bash
+cd frontend
+npm install     # 首次或 package.json 变更后运行
+```
+
+**配置后端地址（可选）：** 前端默认走 `http://localhost:8080`（见 `src/api/auth.ts` 等）。如果后端跑在别的地址，创建 `frontend/.env.local`：
+
+```
+VITE_API_BASE=http://192.168.1.100:8080
+```
+
+**启动开发服务器：**
+
+```bash
+npm run dev
+```
+
+看到 `Local: http://localhost:5173/`，浏览器打开 http://localhost:5173 进入登录页。
+
+**生产构建：**
+
+```bash
+npm run build     # 产物在 frontend/dist
+npm run preview   # 本地预览生产包
+```
+
+### 0.6 第一次跑通
+
+按以下顺序验证核心链路：
+
+**Step 1 - 登录：** 浏览器打开 http://localhost:5173，输入 `alice / 123456` 登录 -> 进入主对话页。
+
+**Step 2 - 发起对话：** 输入几个逐层验证的问题：
+
+| 输入 | 期望结果 | 验证点 |
+|---|---|---|
+| 你好 | 短回复 + 推荐问题 | 基础 LLM 通路 |
+| 我明天从北京去上海出差 3 天，帮我看下政策 | InfoAgent + PolicyTools 联合回答 | RAG + 政策工具 |
+| 我要请假出差，帮我建个差旅单 | Human-in-the-Loop 表单弹出 | UserInteractionTools |
+
+**Step 3 - 观察 SSE 事件：** 打开浏览器 DevTools -> Network -> 筛选 `respond`，会看到 text/event-stream 连接持续接收：`thinking` / `progress` / `travel_data` / `message` / `suggestions` / `done`。
+
+**Step 4 - 验证会话持久化：** 左侧 Sidebar 看到会话已保存，标题由 `ConversationTitleService` 异步生成；刷新页面重新登录 -> 点开历史会话 -> 消息列表完整回显。
+
+**Step 5 - 后台数据核对：**
+
+```sql
+USE travel;
+SELECT conversation_id, title, updated_at FROM chat_conversation ORDER BY updated_at DESC LIMIT 5;
+SELECT message_id, role, LEFT(content, 60) AS preview FROM chat_message ORDER BY created_at DESC LIMIT 10;
+SELECT * FROM agentscope_session LIMIT 3;
+```
+
+看到上述表有数据即说明多轮记忆与会话历史都已落库。
+
+### 0.7 常见问题（FAQ / 故障排查）
+
+#### 后端启动失败
+
+| 现象 | 排查 |
+|---|---|
+| Public Key Retrieval is not allowed | JDBC URL 加 `allowPublicKeyRetrieval=true` |
+| Communications link failure | MySQL 未起 / 网络不通 / 密码错 |
+| Redis 连接超时 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` 未按环境覆盖 |
+| Unknown initial character set index '255' | MySQL < 8.0，建议升级 |
+| DashScope 401 / 403 | `DASHSCOPE_API_KEY` 未生效，检查环境变量顺序 |
+| orizn-visa-mcp 启动失败 | npx 不在 PATH，或首次拉包超时；把 `ORIZN_MCP_COMMAND` 改为 npx 绝对路径 |
+| 端口 8080 被占 | `export SERVER_PORT=8081`（或改 `server.port`） |
+
+#### 前端相关
+
+| 现象 | 排查 |
+|---|---|
+| 登录报网络错误 | 检查后端是否已跑起来 + `VITE_API_BASE` 指向正确地址 |
+| SSE 只收到几条就停 | 反向代理未关闭 buffering；开发环境直连 Vite 不受此影响 |
+| 401 Unauthorized | Token 过期或未在请求头带 `Authorization` |
+| npm install 慢 / 失败 | 切换国内镜像：`npm config set registry https://registry.npmmirror.com` |
+
+#### 对话相关
+
+| 现象 | 排查 |
+|---|---|
+| 回复很慢 / 一直转圈 | 观察后端 `AgentExecutionLoggerHook` 日志，看是哪一步慢；可能是 MCP 拉子进程首次冷启动 |
+| 搜索卡片不显示 | 对应 Skill CLI 未安装（如 `tuniu-cli`），查看后端日志中的 stderr |
+| Agent 中断不生效 | Redis 未连通，`AgentInterruptBroadcast` 无法广播 |
+| 熔断误伤 | 调 `app.circuit-breaker.failure-threshold` 与冷却时间，或临时 `TOOL_CB_ENABLED=false` |
+
+---
 
 ## 一、项目概述
 

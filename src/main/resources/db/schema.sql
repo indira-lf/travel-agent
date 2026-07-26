@@ -1,5 +1,5 @@
 -- GoGo 差旅助手数据库初始化脚本
--- 请在 MySQL 中先执行 CREATE DATABASE gogo_travel DEFAULT CHARACTER SET utf8mb4;
+-- 请在 MySQL 中先执行 CREATE DATABASE travel DEFAULT CHARACTER SET utf8mb4;
 
 CREATE TABLE IF NOT EXISTS agentscope_session (
                                                    session_id VARCHAR(255) NOT NULL,
