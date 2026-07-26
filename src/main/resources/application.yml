@@ -1,0 +1,145 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gogo-travel-agent
+  config:
+    import:
+      - classpath:city-tier.yml
+      - classpath:intent-seed.yml
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:Hollis666}
+      database: 0
+      username: hollis
+
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/gogo_travel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: hollis
+    password: Hollis666
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 60000
+      test-while-idle: true
+      validation-query: SELECT 1
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: admin
+
+mybatis-plus:
+  type-handlers-package: com.gogo.travel.config
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    default-enum-type-handler: com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler
+  global-config:
+    db-config:
+      id-type: input
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    com.gogo.travel: INFO # 需要排查问题时改为DEBUG，我们打了很多DEBUG日志用于观察agent运行情况
+    io.agentscope.core: INFO
+
+travel:
+  skill:
+    path: classpath:skills
+
+# 外部联网查询配置
+# API Key 加密存储配置（生产环境请通过环境变量注入强密钥）
+app:
+  api-key-encrypt-secret: gogo-travel-default-secret
+  # NewsData.io API Key，用于目的地资讯查询（query_destination_news 工具）
+  # 免费注册地址：https://newsdata.io，免费额度 200 次/天
+  # 未配置时该工具会优雅降级，不影响其他功能
+  news-api-key: pub_xxxxxx # 记得改成你自己的
+  weather-mcp:
+    # 天气 MCP Streamable HTTP 端点（阿里云云市场网关地址，含 AppCode 鉴权）
+    endpoint: ${WEATHER_MCP_ENDPOINT:http://mcpservergateway.market.alicloudapi.com/mcpnacos/cmapi00074002/xxxxxxxxx}  # 记得改成你自己的
+    # 天气 MCP 工具白名单（逗号分隔的工具名称）
+    # 当前选定 6 个差旅核心工具（省略 POI/经纬度类、长期预报、生活指数等）：
+    enabled-tools: 城市天气实况,城市15日预报,城市天气预警,城市空气实况,城市24小时预报,城市40日预报
+
+  # Orizn Visa MCP：通过 stdio 方式启动 npx -y orizn-visa-mcp 进程
+  # 覆盖 39,585 个护照-目的地对的签证要求，支持 15 种语言
+  # 免费版（不配 API Key）只能使用 quick_visa_check 与 get_coverage_stats
+  # 注册 API Key：https://visa.orizn.app
+  orizn-mcp:
+    # 启动命令（绝对路径优先，避免 PATH 找不到）。也可直接用 npx。
+    command: ${ORIZN_MCP_COMMAND:npx}
+    # 命令参数（逗号分隔）。默认 npx -y orizn-visa-mcp
+    args: ${ORIZN_MCP_ARGS:-y,orizn-visa-mcp}
+    # Orizn Visa API Key（env 形式注入子进程）。未配置时走免费模式，仅暴露两个免费工具
+    api-key: ${ORIZN_API_KEY:orizn_visa_xxxxxxxxxx}  # 记得改成你自己的
+    # MCP 工具白名单（逗号分隔）。
+    # 留空则暴露 Orizn 服务端声明的全部工具（按需 + 免费）；
+    # 非空则只向 LLM 暴露白名单内的工具，减少 Token 消耗。
+    # 默认：仅暴露免费版可用的两个工具，避免调用付费工具时反复报错
+    enabled-tools: ${ORIZN_MCP_ENABLED_TOOLS:quick_visa_check,check_visa_requirement}
+    # MCP 初始化握手超时
+    initialization-timeout-seconds: 20
+    # 工具调用请求超时
+    request-timeout-seconds: 30
+
+  # 工具维度熔断降级配置。
+  # 当某个受监控的 tool 连续失败达到阈值时，自动从 toolkit 中卸载该 tool；
+  # 冷却期（指数退避）结束后在下次推理前重新激活。
+  # 分布式场景下使用 Redis 共享失败计数与冷却时间。
+  circuit-breaker:
+    # 是否启用 tool 维度熔断。默认关闭，按需开启。
+    enabled: ${TOOL_CB_ENABLED:true}
+    # 受监控的 tool 名称白名单（逗号分隔）。只有在此列表中的 tool 才会被熔断。
+    # 例：tuniuHotelSearch, flyaiFlightSearch —— 接外部接口/慢依赖的 tool 按需添加。
+    monitored-tool-names: ${TOOL_CB_MONITORED_NAMES:query_weather,query_destination_news}
+    # 触发降级的连续失败次数阈值。
+    failure-threshold: 3
+    # 初始冷却时间（秒）。
+    initial-cooldown-seconds: 60
+    # 指数退避倍数。
+    backoff-multiplier: 2.0
+    # 冷却时间上限（秒），避免指数退避无限增长。
+    max-cooldown-seconds: 600
+    # Redis Key 前缀，区分不同环境。
+    redis-key-prefix: "tool:cb:"
+    # 状态 TTL（秒），仅用于清理长期未触发的脏数据。
+    state-ttl-seconds: 86400
+
+agentscope:
+  dashscope:
+    api-key: @dashscope.api.key@ # 记得改成你自己的：去跟pom找到dashscope.api.key，修改后重新编译，或者在这直接改。
+  bailian:
+    # 百炼记忆库 ID
+    memory-library-id: xxxxxxxx # 记得改成你自己的
+    access-key-id: xxxxxxxx # 记得改成你自己的
+    access-key-secret: xxxxxxxx # 记得改成你自己的
+    workspace-id: xxxxxxxx # 记得改成你自己的
+    index-id: xxxxxxxx # 记得改成你自己的
+
+# Sa-Token 配置
+sa-token:
+  # Token 名称，前端需在请求头中携带
+  token-name: Authorization
+  # Token 有效期（2592000 = 30 天）
+  timeout: 2592000
+  # 动态 Token 活跃续期：每次请求重置倒计时，-1 表示不续期
+  active-timeout: -1
+  # 是否允许同一账号多地登录
+  is-concurrent: true
+  # 相同用户相同端多次登录是否共用同一 Token
+  is-share: false
+  # Token 风格：随机 128 位
+  token-style: random-128
+  # 关闭启动日志
+  is-print: false
