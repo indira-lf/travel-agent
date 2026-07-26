@@ -64,10 +64,10 @@ app:
   # NewsData.io API Key，用于目的地资讯查询（query_destination_news 工具）
   # 免费注册地址：https://newsdata.io，免费额度 200 次/天
   # 未配置时该工具会优雅降级，不影响其他功能
-  news-api-key: pub_xxxxxx # 记得改成你自己的
+  news-api-key: ${NEWS_API_KEY}  # 通过环境变量 NEWS_API_KEY 注入；未配置时该工具优雅降级
   weather-mcp:
     # 天气 MCP Streamable HTTP 端点（阿里云云市场网关地址，含 AppCode 鉴权）
-    endpoint: ${WEATHER_MCP_ENDPOINT:http://mcpservergateway.market.alicloudapi.com/mcpnacos/cmapi00074002/xxxxxxxxx}  # 记得改成你自己的
+    endpoint: ${WEATHER_MCP_ENDPOINT}  # 通过环境变量 WEATHER_MCP_ENDPOINT 注入
     # 天气 MCP 工具白名单（逗号分隔的工具名称）
     # 当前选定 6 个差旅核心工具（省略 POI/经纬度类、长期预报、生活指数等）：
     enabled-tools: 城市天气实况,城市15日预报,城市天气预警,城市空气实况,城市24小时预报,城市40日预报
@@ -82,7 +82,7 @@ app:
     # 命令参数（逗号分隔）。默认 npx -y orizn-visa-mcp
     args: ${ORIZN_MCP_ARGS:-y,orizn-visa-mcp}
     # Orizn Visa API Key（env 形式注入子进程）。未配置时走免费模式，仅暴露两个免费工具
-    api-key: ${ORIZN_API_KEY:orizn_visa_xxxxxxxxxx}  # 记得改成你自己的
+    api-key: ${ORIZN_API_KEY}  # 通过环境变量 ORIZN_API_KEY 注入；未配置时走免费模式
     # MCP 工具白名单（逗号分隔）。
     # 留空则暴露 Orizn 服务端声明的全部工具（按需 + 免费）；
     # 非空则只向 LLM 暴露白名单内的工具，减少 Token 消耗。
@@ -118,14 +118,14 @@ app:
 
 agentscope:
   dashscope:
-    api-key: @dashscope.api.key@ # 记得改成你自己的：去跟pom找到dashscope.api.key，修改后重新编译，或者在这直接改。
+    api-key: ${DASHSCOPE_API_KEY:@dashscope.api.key@}  # 通过环境变量 DASHSCOPE_API_KEY 注入；未设置时回退到 pom 中 dashscope.api.key 的编译期值
   bailian:
     # 百炼记忆库 ID
-    memory-library-id: xxxxxxxx # 记得改成你自己的
-    access-key-id: xxxxxxxx # 记得改成你自己的
-    access-key-secret: xxxxxxxx # 记得改成你自己的
-    workspace-id: xxxxxxxx # 记得改成你自己的
-    index-id: xxxxxxxx # 记得改成你自己的
+    memory-library-id: ${BAILIAN_MEMORY_LIBRARY_ID}  # 通过环境变量 BAILIAN_MEMORY_LIBRARY_ID 注入
+    access-key-id: ${BAILIAN_ACCESS_KEY_ID}  # 通过环境变量 BAILIAN_ACCESS_KEY_ID 注入
+    access-key-secret: ${BAILIAN_ACCESS_KEY_SECRET}  # 通过环境变量 BAILIAN_ACCESS_KEY_SECRET 注入
+    workspace-id: ${BAILIAN_WORKSPACE_ID}  # 通过环境变量 BAILIAN_WORKSPACE_ID 注入
+    index-id: ${BAILIAN_INDEX_ID}  # 通过环境变量 BAILIAN_INDEX_ID 注入
 
 # Sa-Token 配置
 sa-token:

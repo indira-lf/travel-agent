@@ -29,7 +29,7 @@
         <spring.ai.alibaba.version>1.1.2.0</spring.ai.alibaba.version>
         <fastjson.version>2.0.43</fastjson.version>
 
-        <!-- 统一配置 API Key，记得改成你自己的（application.yml 中通过 @dashscope.api.key@ 占位符引用） -->
+        <!-- 统一配置 API Key，记得改成你自己的；application.yml 中作为环境变量 DASHSCOPE_API_KEY 的编译期默认回退值（启动时可通过 DASHSCOPE_API_KEY 覆盖） -->
         <dashscope.api.key>sk-1481f569ca5548cdaca784e41aa0988a</dashscope.api.key>
 
         <!-- 三方依赖版本 -->
